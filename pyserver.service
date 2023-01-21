@@ -1,0 +1,14 @@
+#systemd service file for running the server after being setup
+[Unit]
+Description=Gunicorn instance to serve webhook listiner
+After=network.target
+
+[Service]
+User=webhook
+Group=www-data
+WorkingDirectory=/path/to/project/webhook
+Environment="PATH=/path/to/project/webhook/venv/bin"
+ExecStart=/path/to/project/webhook/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:5000 wsgi:app
+
+[Install]
+WantedBy=multi-user.target
