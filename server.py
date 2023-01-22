@@ -6,9 +6,13 @@ import requests
 import hmac
 import hashlib
 import subprocess
-import datetime
+import logging
 
 app = Flask(__name__)
+
+# logger = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
+
 
 secret = ""
 
@@ -17,53 +21,43 @@ def verify(api_key, body, signature):
     hmac_digest = hmac.new(key,body,digestmod=hashlib.sha256).hexdigest()
     sig_part = signature.split("=", 1)
     fsignature = sig_part[1].encode('utf-8')
-    # if isinstance(fsignature, str):
-    #     print("fsignature is string", file=sys.stdout)
-    # if isinstance(hmac_digest, str):
-    #     print("hmac digest is string", file=sys.stdout)
     return hmac.compare_digest(fsignature, hmac_digest.encode('utf-8'))
 
 def getHeader(key):
     """Return message header"""
-
     try:
         return request.headers[key]
     except KeyError:
         abort(400, "Missing header: " + key)
 
 def pullGit(path):
-    # process = subprocess.Popen(["git", "pull", "-C", path], stdout=subprocess.PIPE)
-    # output = process.communicate()[0]
-    sttime = datetime.now().strftime('%Y%m%d_%H:%M:%S - ')
-    f = open("test.log", "a")
-    f.write(sttime + path + '\n')
-    f.close()
-    return
-
-# def threaded(func):
-#     #https://stackoverflow.com/questions/67071870/python-make-a-function-always-use-a-thread-without-calling-thread-start
-#     """Decorator to automatically launch a function in a thread"""
-#     @functools.wraps(func)
-#     def wrapper(*args, **kwargs):  # replaces original function...
-#         # ...and launches the original in a thread
-#         thread = threading.Thread(target=func, args=args, kwargs=kwargs)
-#         print("Starting Thread")
-#         thread.start()
-#         return thread
-#     return wrapper
+    """Pulls the repo"""
+    process = subprocess.Popen(["git", "-C",  "/home/vscode/Code/GithubProjects/" + path + "/", "pull"], stdout=subprocess.PIPE)
+    output = process.communicate()[0]
+    exitcode = process.returncode
+    logging.info("Git output: " + output.decode("utf-8"))
+    logging.debug("Git Exitcode is: " + str(exitcode))
+    if exitcode is 0:
+        return output, 201
+    else:
+        return 'Git returned an error', 400
+    return "error", 400
 
 def deploy(gitName, private):
+    """Deploy logic"""
     if not private:
-        pullGit(gitName)
-        return 'success', 201
+        return pullGit(gitName)
     else:
-        return 'Erorr', 400
+        return 'Private Repository', 400
 
 @app.route('/deploy', methods=['POST'])
 def webhook():
     """Webhook POST listener"""
+    logging.info("Request recived from " + request.headers.get('cf-connecting-ip'))
+    logging.debug(request.headers)
+    logging.debug(request.data)
     if request.method == 'POST':
-        if "GitHub-Hookshot" in get_header("User-Agent"):
+        if "GitHub-Hookshot" in getHeader("User-Agent"):
             if verify(secret, request.data, getHeader("X-Hub-Signature-256")):
                 repo = request.json.get('repository')
                 return deploy(repo.get('name'), repo.get('private'))
@@ -75,4 +69,6 @@ def webhook():
         abort(405)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0")
+    logging.info('Starting')
+    #app.run(host="0.0.0.0")
+    logging.info('Exiting')
