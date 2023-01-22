@@ -63,7 +63,7 @@ def deploy(gitName, private):
 def webhook():
     """Webhook POST listener"""
     if request.method == 'POST':
-        if "GitHub-Hookshot" in _get_header("User-Agent"):
+        if "GitHub-Hookshot" in get_header("User-Agent"):
             if verify(secret, request.data, getHeader("X-Hub-Signature-256")):
                 repo = request.json.get('repository')
                 return deploy(repo.get('name'), repo.get('private'))
