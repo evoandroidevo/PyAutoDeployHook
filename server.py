@@ -1,4 +1,3 @@
-import threading
 import http.client as httplib
 import functools
 from flask import Flask, request, abort
@@ -7,14 +6,23 @@ import hmac
 import hashlib
 import subprocess
 import logging
+import threading
+from retry import retry
 
 app = Flask(__name__)
-
-# logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
 
 
 secret = ""
+
+def getURL(repoName):
+    """Switch statment for webhook urls"""
+    match repoName:
+        case "":
+            return ""
+        case _:
+            return ""
+
 
 def verify(api_key, body, signature):
     key = api_key.encode("utf-8")
@@ -30,6 +38,51 @@ def getHeader(key):
     except KeyError:
         abort(400, "Missing header: " + key)
 
+class NoInternet(Exception):
+    pass
+
+def have_internet() -> bool: #https://stackoverflow.com/questions/3764291/how-can-i-see-if-theres-an-available-and-active-network-connection-in-python
+    conn = httplib.HTTPSConnection("8.8.8.8", timeout=5)
+    try:
+        conn.request("HEAD", "/")
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+def threaded(func):
+    #https://stackoverflow.com/questions/67071870/python-make-a-function-always-use-a-thread-without-calling-thread-start
+    """Decorator to automatically launch a function in a thread"""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):  # replaces original function...
+        # ...and launches the original in a thread
+        thread = threading.Thread(target=func, args=args, kwargs=kwargs)
+        print("Starting Thread")
+        thread.start()
+        return thread
+    return wrapper
+
+@threaded
+def sendWebhook(arg):
+    #used https://gist.github.com/Bilka2/5dd2ca2b6e9f3573e0c2defe5d3031b2
+    #as a base for this.
+    try:
+        if have_internet():
+            result = requests.post(sendurl, json=arg)
+            if 200 <= result.status_code < 300:
+                print(f"Webhook sent. \nReturned Code: {result.status_code}")
+                return result.status_code
+            else:
+                print(f"Not sent with {result.status_code}, response:\n{result.json()}")
+                return result.status_code
+        else:
+            raise NoInternet("ERROR: No Internet Detected.")
+        
+    except Exception as error:
+        print(error)
+        raise
+
 def pullGit(path):
     """Pulls the repo"""
     process = subprocess.Popen(["git", "-C",  "/home/vscode/Code/GithubProjects/" + path + "/", "pull"], stdout=subprocess.PIPE)
@@ -37,30 +90,37 @@ def pullGit(path):
     exitcode = process.returncode
     logging.info("Git output: " + output.decode("utf-8"))
     logging.debug("Git Exitcode is: " + str(exitcode))
-    if exitcode is 0:
+    if exitcode == 0:
         return output, 201
     else:
         return 'Git returned an error', 400
     return "error", 400
 
-def deploy(gitName, private):
+def deploy(gitName, private, data):
     """Deploy logic"""
-    if not private:
-        return pullGit(gitName)
-    else:
-        return 'Private Repository', 400
+    match gitName:
+        case "PyAutoDeployHook":
+            pullGit(gitName)
+        case "authelia":
+            sendWebhook(data, geturl(gitName))
+        case _:
+            return
+    # if not private:
+    #     return pullGit(gitName)
+    # else:
+    #     return 'Private Repository', 400
 
 @app.route('/deploy', methods=['POST'])
 def webhook():
     """Webhook POST listener"""
-    logging.info("Request recived from " + request.headers.get('cf-connecting-ip'))
+    logging.info("Request recived from " + getHeader('cf-connecting-ip'))
     logging.debug(request.headers)
     logging.debug(request.data)
     if request.method == 'POST':
         if "GitHub-Hookshot" in getHeader("User-Agent"):
             if verify(secret, request.data, getHeader("X-Hub-Signature-256")):
                 repo = request.json.get('repository')
-                return deploy(repo.get('name'), repo.get('private'))
+                return deploy(repo.get('name'), repo.get('private'), request.json)
             else:
                 abort(401)
         else:
@@ -70,5 +130,5 @@ def webhook():
 
 if __name__ == '__main__':
     logging.info('Starting')
-    #app.run(host="0.0.0.0")
+    app.run()
     logging.info('Exiting')
