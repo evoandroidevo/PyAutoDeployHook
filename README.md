@@ -4,7 +4,7 @@ Python webhook server for running github deploy on push
 ## Install
 
 ```console
-git clone https://github.com/evoandroidevo/PyInternetTestWebhook.git
+git clone https://github.com/evoandroidevo/PyAutoDeployHook.git
 cd PyInternetTestWebhook
 python -m venv venv
 source venv/bin/activate
@@ -12,7 +12,7 @@ pip install -r requirements.txt
 deactivate
 ```
 Edit webhook.service to have the right path and user
-also edit myserver.py to have the correct webhook on sendurl=""
+also edit server.py to have the correct secret=""
 
 after the edits are done you can test with 
 
