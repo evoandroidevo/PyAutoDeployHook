@@ -1,3 +1,4 @@
+#TODO add more comments for documentation
 import http.client as httplib
 import functools
 from flask import Flask, request, abort
@@ -31,7 +32,7 @@ def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
         print('Failed to load configuration file. Using default configs')
 
 
-secret = "#s&zeYtQepD*KR2sx4KdK6B%!j7!DXX$DPJfTtV8^e%T#rs2sAUwaT9i$psy5GwbNDb&Msus!^dFa979MVh%m$!vyk2a84*i2A%qyGkN63@4RHH6e9jBU53#Vf7iHL9Z"
+secret = ""
 
 def getURL(repoName):
     #TODO: get url from config
@@ -44,6 +45,8 @@ def getURL(repoName):
 
 
 def verify(api_key, body, signature):
+    #TODO get secret from config
+
     key = api_key.encode("utf-8")
     hmac_digest = hmac.new(key,body,digestmod=hashlib.sha256).hexdigest()
     sig_part = signature.split("=", 1)
