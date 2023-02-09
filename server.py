@@ -8,14 +8,33 @@ import subprocess
 import logging
 import threading
 from retry import retry
+import yaml
+import os
 
 app = Flask(__name__)
 logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
 
+def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
+    path = default_path
+    value = os.getenv(env_key, None)
+    if value:
+        path = value
+    if os.path.exists(path):
+        with open(path, 'rt') as f:
+            try:
+                config = yaml.safe_load(f.read())
+                return config
+            except Exception as e:
+                print(e)
+                print('Error in Loaded Configuration. Using default configs')
+    else:
+        print('Failed to load configuration file. Using default configs')
 
-secret = ""
+
+secret = "#s&zeYtQepD*KR2sx4KdK6B%!j7!DXX$DPJfTtV8^e%T#rs2sAUwaT9i$psy5GwbNDb&Msus!^dFa979MVh%m$!vyk2a84*i2A%qyGkN63@4RHH6e9jBU53#Vf7iHL9Z"
 
 def getURL(repoName):
+    #TODO: get url from config
     """Switch statment for webhook urls"""
     match repoName:
         case "":
@@ -69,6 +88,7 @@ def sendWebhook(arg, sendURL):
     #used https://gist.github.com/Bilka2/5dd2ca2b6e9f3573e0c2defe5d3031b2
     #as a base for this.
     try:
+        #TODO: add catch for webhook url is invalid
         if have_internet():
             result = requests.post(sendURL, json=arg)
             if 200 <= result.status_code < 300:
@@ -100,19 +120,15 @@ def pullGit(path):
     return "error", 400
 
 def deploy(gitName, private, data):
+    #TODO: Add check for branch
     """Deploy logic"""
     match gitName:
         case "PyAutoDeployHook":
-            #pullGit(gitName)
             return sendWebhook(data, getURL(gitName))
         case "authelia":
             return sendWebhook(data, getURL(gitName))
         case _:
             return "No info", 400
-    # if not private:
-    #     return pullGit(gitName)
-    # else:
-    #     return 'Private Repository', 400
 
 @app.route('/deploy', methods=['POST'])
 def webhook():
