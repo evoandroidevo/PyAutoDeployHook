@@ -60,15 +60,6 @@ def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
 
 secret = ""
 
-def getURL(repoName):
-    #TODO: get url from config
-    """Switch statment for webhook urls"""
-    match repoName:
-        case "":
-            return "https://webhook.site/1ba19da1-0195-47ee-97b9-e30f48302177"
-        case _:
-            return "https://webhook.site/1ba19da1-0195-47ee-97b9-e30f48302177"
-
 
 def verify(api_key, body, signature):
     #TODO get secret from config
@@ -151,13 +142,27 @@ def deploy(gitName, private, data):
     #TODO: Add check for branch
     """Deploy logic"""
     data = readConfig()
-    match gitName:
-        case "PyAutoDeployHook":
-            return sendWebhook(data, getURL(gitName))
-        case "authelia":
-            return sendWebhook(data, getURL(gitName))
-        case _:
-            return "No info", 400
+    repos = data['REPOS']
+    logging.debug(repos)
+    logging.debug(len(repos))
+    y = 0
+    for x in repos:
+        if x['name'] == gitName:
+            logging.debug("current repo is " + gitName)
+            logging.debug("sending request to " + x['webhook'])
+            return sendWebhook(data, x['webhook'])
+            break
+        elif y == len(repos):
+            return "repo not in config", 400
+        y += 1
+
+    # match gitName:
+    #     case "PyAutoDeployHook":
+    #         return sendWebhook(data, getURL(gitName))
+    #     case "authelia":
+    #         return sendWebhook(data, getURL(gitName))
+    #     case _:
+    #         return "No info", 400
 
 @app.route('/deploy', methods=['POST'])
 def webhook():
