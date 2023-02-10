@@ -1,19 +1,28 @@
-#TODO add more comments for documentation
-import http.client as httplib
-import functools
-from flask import Flask, request, abort
-import requests
-import hmac
+# TODO add more comments for documentation
 import hashlib
-import subprocess
+import hmac
+import http.client as httplib
 import logging
 import logging.config
-import threading
-from retry import retry
-import yaml
 import os
+import subprocess
+import sys
+
+import requests
+import yaml
+from flask import Flask, abort, request, Response
+from retry import retry
 
 app = Flask(__name__)
+
+
+class ConfigFileNotFound(Exception):
+    pass
+
+
+class NoInternet(Exception):
+    pass
+
 
 def setup_logging(default_path='logconfig.yaml', default_level=logging.INFO, env_key='LOG_CFG'):
     """
@@ -30,12 +39,15 @@ def setup_logging(default_path='logconfig.yaml', default_level=logging.INFO, env
                 config = yaml.safe_load(f.read())
                 logging.config.dictConfig(config['LOGS'])
             except Exception as e:
+                logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s',
+                                    datefmt='%m-%d-%Y_%H:%M:%S', filename='webhook.log', level=logging.INFO)
                 print(e)
                 print('Error in Logging Configuration. Using default configs')
-                logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
     else:
-        logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
+        logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s',
+                            datefmt='%m-%d-%Y_%H:%M:%S', filename='webhook.log', level=logging.INFO)
         print('Failed to load configuration file. Using default configs')
+
 
 def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
     path = default_path
@@ -50,24 +62,26 @@ def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
             except Exception as e:
                 logging.error(e)
                 print(e)
-                print('Error in Loaded Configuration. Using default configs')
-                return e, 400
+                print('Error in Loaded Configuration.')
+                raise ConfigFileNotFound("Error in Loaded Configuration.")
     else:
         logging.error("Config missing")
         print('Failed to load configuration file.')
-        return "Config Missing", 400
+        raise ConfigFileNotFound("Config file missing")
 
+
+yamlconfig = readConfig()
 
 secret = ""
 
 
 def verify(api_key, body, signature):
-    #TODO get secret from config
     key = api_key.encode("utf-8")
-    hmac_digest = hmac.new(key,body,digestmod=hashlib.sha256).hexdigest()
+    hmac_digest = hmac.new(key, body, digestmod=hashlib.sha256).hexdigest()
     sig_part = signature.split("=", 1)
     fsignature = sig_part[1].encode('utf-8')
     return hmac.compare_digest(fsignature, hmac_digest.encode('utf-8'))
+
 
 def getHeader(key):
     """Return message header"""
@@ -76,10 +90,8 @@ def getHeader(key):
     except KeyError:
         abort(400, "Missing header: " + key)
 
-class NoInternet(Exception):
-    pass
 
-def have_internet() -> bool: #https://stackoverflow.com/questions/3764291/how-can-i-see-if-theres-an-available-and-active-network-connection-in-python
+def have_internet() -> bool:  # https://stackoverflow.com/questions/3764291/how-can-i-see-if-theres-an-available-and-active-network-connection-in-python
     conn = httplib.HTTPSConnection("8.8.8.8", timeout=5)
     try:
         conn.request("HEAD", "/")
@@ -89,45 +101,36 @@ def have_internet() -> bool: #https://stackoverflow.com/questions/3764291/how-ca
     finally:
         conn.close()
 
-# def threaded(func):
-#     #https://stackoverflow.com/questions/67071870/python-make-a-function-always-use-a-thread-without-calling-thread-start
-#     """Decorator to automatically launch a function in a thread"""
-#     @functools.wraps(func)
-#     def wrapper(*args, **kwargs):  # replaces original function...
-#         # ...and launches the original in a thread
-#         thread = threading.Thread(target=func, args=args, kwargs=kwargs)
-#         print("Starting Thread")
-#         thread.start()
-#         return thread
-#     return wrapper
 
-#@threaded
 @retry(NoInternet, delay=5, tries=30, backoff=30, max_delay=120)
 def sendWebhook(arg, sendURL):
-    #used https://gist.github.com/Bilka2/5dd2ca2b6e9f3573e0c2defe5d3031b2
-    #as a base for this.
+    # used https://gist.github.com/Bilka2/5dd2ca2b6e9f3573e0c2defe5d3031b2
+    # as a base for this.
     try:
-        #TODO: add catch for webhook url is invalid
+        # TODO: add catch for webhook url is invalid
         if have_internet():
             result = requests.post(sendURL, json=arg)
             if 200 <= result.status_code < 300:
-                #print(f"Webhook sent. \nReturned Code: {result.status_code}")
+                # print(f"Webhook sent. \nReturned Code: {result.status_code}")
                 returnData = f"Webhook sent. \nReturned Code: {result.status_code}"
-                return returnData, result.status_code
+                return Response(returnData, status=result.status_code)
             else:
-                #print(f"Not sent with {result.status_code}, response:\n{result.json()}")
+                # print(f"Not sent with {result.status_code}, response:\n{result.json()}")
                 errorData = f"Not sent with {result.status_code}, response:\n{result.json()}"
-                return errorData, result.status_code
+                #return errorData, result.status_code
+                return Response(errorData, status=result.status_code)
         else:
             raise NoInternet("ERROR: No Internet Detected.")
-        
+
     except Exception as error:
         print(error)
         raise
 
+
 def pullGit(path):
     """Pulls the repo"""
-    process = subprocess.Popen(["git", "-C",  "/home/vscode/Code/GithubProjects/" + path + "/", "pull"], stdout=subprocess.PIPE)
+    process = subprocess.Popen(
+        ["git", "-C",  "/home/vscode/Code/GithubProjects/" + path + "/", "pull"], stdout=subprocess.PIPE)
     output = process.communicate()[0]
     exitcode = process.returncode
     logging.info("Git output: " + output.decode("utf-8"))
@@ -136,33 +139,25 @@ def pullGit(path):
         return output, 201
     else:
         return 'Git returned an error', 400
-    return "error", 400
+
 
 def deploy(gitName, private, data):
-    #TODO: Add check for branch
+    # TODO: Add check for branch
     """Deploy logic"""
-    data = readConfig()
-    repos = data['REPOS']
+    repos = yamlconfig['REPOS']
     logging.debug(repos)
     logging.debug(len(repos))
+    logging.debug(type(repos))
     y = 0
     for x in repos:
         if x['name'] == gitName:
             logging.debug("current repo is " + gitName)
-            logging.debug("sending request to " + x['webhook'])
-            return sendWebhook(data, x['webhook'])
-            break
+            logging.info("sending request to " + x['webhook'])
+            return sendWebhook("Webhook received and valid", x['webhook'])
         elif y == len(repos):
-            return "repo not in config", 400
+            return Response(f'Error: No Repo in config file', status=400)
         y += 1
 
-    # match gitName:
-    #     case "PyAutoDeployHook":
-    #         return sendWebhook(data, getURL(gitName))
-    #     case "authelia":
-    #         return sendWebhook(data, getURL(gitName))
-    #     case _:
-    #         return "No info", 400
 
 @app.route('/deploy', methods=['POST'])
 def webhook():
@@ -172,8 +167,8 @@ def webhook():
     logging.debug(request.data)
     if request.method == 'POST':
         if "GitHub-Hookshot" in getHeader("User-Agent"):
-            secret = readConfig()
-            if verify(secret['GITHUB_SECRET'], request.data, getHeader("X-Hub-Signature-256")):
+            if verify(yamlconfig['GITHUB_SECRET'], request.data, getHeader("X-Hub-Signature-256")):
+                logging.info("request verifyed")
                 repo = request.json.get('repository')
                 return deploy(repo.get('name'), repo.get('private'), request.json)
             else:
@@ -183,8 +178,13 @@ def webhook():
     else:
         abort(405)
 
+
 if __name__ == '__main__':
     setup_logging()
     logging.info('Starting')
-    app.run(host="0.0.0.0")
+    try:
+        app.run(host="0.0.0.0")
+    except ConfigFileNotFound as e:
+        logging.critical(e)
+        sys.exit(1)
     logging.info('Exiting')
