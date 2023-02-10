@@ -7,13 +7,35 @@ import hmac
 import hashlib
 import subprocess
 import logging
+import logging.config
 import threading
 from retry import retry
 import yaml
 import os
 
 app = Flask(__name__)
-logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
+
+def setup_logging(default_path='logconfig.yaml', default_level=logging.INFO, env_key='LOG_CFG'):
+    """
+    | **@author:** Prathyush SP
+    | Logging Setup
+    """
+    path = default_path
+    value = os.getenv(env_key, None)
+    if value:
+        path = value
+    if os.path.exists(path):
+        with open(path, 'rt') as f:
+            try:
+                config = yaml.safe_load(f.read())
+                logging.config.dictConfig(config['LOGS'])
+            except Exception as e:
+                print(e)
+                print('Error in Logging Configuration. Using default configs')
+                logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
+    else:
+        logging.basicConfig(format='%(asctime)-18s - %(name)-8s - %(levelname)-8s : %(message)s', datefmt='%m-%d-%Y_%H:%M:%S', filename='test.log', level=logging.INFO)
+        print('Failed to load configuration file. Using default configs')
 
 def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
     path = default_path
@@ -26,10 +48,14 @@ def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
                 config = yaml.safe_load(f.read())
                 return config
             except Exception as e:
+                logging.error(e)
                 print(e)
                 print('Error in Loaded Configuration. Using default configs')
+                return e, 400
     else:
-        print('Failed to load configuration file. Using default configs')
+        logging.error("Config missing")
+        print('Failed to load configuration file.')
+        return "Config Missing", 400
 
 
 secret = ""
@@ -46,7 +72,6 @@ def getURL(repoName):
 
 def verify(api_key, body, signature):
     #TODO get secret from config
-
     key = api_key.encode("utf-8")
     hmac_digest = hmac.new(key,body,digestmod=hashlib.sha256).hexdigest()
     sig_part = signature.split("=", 1)
@@ -125,6 +150,7 @@ def pullGit(path):
 def deploy(gitName, private, data):
     #TODO: Add check for branch
     """Deploy logic"""
+    data = readConfig()
     match gitName:
         case "PyAutoDeployHook":
             return sendWebhook(data, getURL(gitName))
@@ -141,7 +167,8 @@ def webhook():
     logging.debug(request.data)
     if request.method == 'POST':
         if "GitHub-Hookshot" in getHeader("User-Agent"):
-            if verify(secret, request.data, getHeader("X-Hub-Signature-256")):
+            secret = readConfig()
+            if verify(secret['GITHUB_SECRET'], request.data, getHeader("X-Hub-Signature-256")):
                 repo = request.json.get('repository')
                 return deploy(repo.get('name'), repo.get('private'), request.json)
             else:
@@ -152,6 +179,7 @@ def webhook():
         abort(405)
 
 if __name__ == '__main__':
+    setup_logging()
     logging.info('Starting')
     app.run(host="0.0.0.0")
     logging.info('Exiting')
