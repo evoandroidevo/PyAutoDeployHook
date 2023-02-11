@@ -7,6 +7,7 @@ import logging.config
 import os
 import subprocess
 import sys
+from urllib.parse import urlparse
 
 import requests
 import yaml
@@ -107,7 +108,10 @@ def sendWebhook(arg, sendURL):
     # used https://gist.github.com/Bilka2/5dd2ca2b6e9f3573e0c2defe5d3031b2
     # as a base for this.
     try:
-        # TODO: add catch for webhook url is invalid
+        parsed_url = urlparse(sendURL)
+        if not all([parsed_url.scheme, parsed_url.netloc]):
+            raise Exception("Invalid sendURL")
+            
         if have_internet():
             result = requests.post(sendURL, json=arg)
             if 200 <= result.status_code < 300:
@@ -121,10 +125,14 @@ def sendWebhook(arg, sendURL):
                 return Response(errorData, status=result.status_code)
         else:
             raise NoInternet("ERROR: No Internet Detected.")
-
+        
+    except NoInternet as e:
+        logging.info("No internet detected")
+        logging.debug(e)
+        raise
     except Exception as error:
         print(error)
-        raise
+        return Response(f'URL error in config', status=400)
 
 
 def pullGit(path):
@@ -142,7 +150,6 @@ def pullGit(path):
 
 
 def deploy(gitName, branch):
-    # TODO: Add check for branch
     """Deploy logic"""
     repos = yamlconfig['REPOS']
     logging.debug(repos)
