@@ -25,6 +25,7 @@ class NoInternet(Exception):
     pass
 
 
+# read logging config for setup and fall back to basicConfig if file not found or has yaml errors
 def setup_logging(default_path='logconfig.yaml', default_level=logging.INFO, env_key='LOG_CFG'):
     """
     | **@author:** Prathyush SP
@@ -50,6 +51,7 @@ def setup_logging(default_path='logconfig.yaml', default_level=logging.INFO, env
         print('Failed to load configuration file. Using default configs')
 
 
+# Read config file and throw a ConfigFileNotFound exception if there was an error with the config
 def readConfig(default_path='config.yaml', env_key='CFG_PTH'):
     path = default_path
     value = os.getenv(env_key, None)
@@ -76,6 +78,7 @@ yamlconfig = readConfig()
 secret = ""
 
 
+# verify the request with hmac header
 def verify(api_key, body, signature):
     key = api_key.encode("utf-8")
     hmac_digest = hmac.new(key, body, digestmod=hashlib.sha256).hexdigest()
@@ -84,6 +87,7 @@ def verify(api_key, body, signature):
     return hmac.compare_digest(fsignature, hmac_digest.encode('utf-8'))
 
 
+# returns the header value or aborts if the header is missing
 def getHeader(key):
     """Return message header"""
     try:
@@ -92,6 +96,7 @@ def getHeader(key):
         abort(400, "Missing header: " + key)
 
 
+# checks for internet access though googles dns server
 def have_internet() -> bool:  # https://stackoverflow.com/questions/3764291/how-can-i-see-if-theres-an-available-and-active-network-connection-in-python
     conn = httplib.HTTPSConnection("8.8.8.8", timeout=5)
     try:
@@ -103,6 +108,7 @@ def have_internet() -> bool:  # https://stackoverflow.com/questions/3764291/how-
         conn.close()
 
 
+# sends the request to the webhook url in config and returns the response to the sender
 @retry(NoInternet, delay=5, tries=30, backoff=30, max_delay=120)
 def sendWebhook(arg, sendURL):
     # used https://gist.github.com/Bilka2/5dd2ca2b6e9f3573e0c2defe5d3031b2
@@ -111,7 +117,7 @@ def sendWebhook(arg, sendURL):
         parsed_url = urlparse(sendURL)
         if not all([parsed_url.scheme, parsed_url.netloc]):
             raise Exception("Invalid sendURL")
-            
+
         if have_internet():
             result = requests.post(sendURL, json=arg)
             if 200 <= result.status_code < 300:
@@ -121,11 +127,11 @@ def sendWebhook(arg, sendURL):
             else:
                 # print(f"Not sent with {result.status_code}, response:\n{result.json()}")
                 errorData = f"Not sent with {result.status_code}, response:\n{result.json()}"
-                #return errorData, result.status_code
+                # return errorData, result.status_code
                 return Response(errorData, status=result.status_code)
         else:
             raise NoInternet("ERROR: No Internet Detected.")
-        
+
     except NoInternet as e:
         logging.info("No internet detected")
         logging.debug(e)
@@ -149,7 +155,8 @@ def pullGit(path):
         return 'Git returned an error', 400
 
 
-def deploy(gitName, branch):
+# Uses the requests data points and reads the config to route the request to the correct place
+def deploy(gitName, branch, data):
     """Deploy logic"""
     repos = yamlconfig['REPOS']
     logging.debug(repos)
@@ -165,20 +172,22 @@ def deploy(gitName, branch):
             if x['name'] == gitName:
                 logging.debug("current repo is " + gitName)
                 logging.info("sending request to " + x['webhook'])
-                return sendWebhook("Webhook received and valid", x['webhook'])
+                return sendWebhook(data, x['webhook'])
             elif y == len(repos) - 1:
                 logging.debug("Checked list spot " + str(y))
-                logging.debug("No Repo with name " + gitName + " in config file ignoring request and returning http code 202 ")
+                logging.debug("No Repo with name " + gitName +
+                              " in config file ignoring request and returning http code 202 ")
                 return Response(f'No Repo in config file ingnoring request', status=202)
         elif y == len(repos) - 1:
-                logging.debug("Checked list spot " + str(y))
-                logging.debug("No Branch with name " + branch + " in config file ignoring request and returning http code 202 ")
-                return Response(f'No Branch in config file ignoring request', status=202)
+            logging.debug("Checked list spot " + str(y))
+            logging.debug("No Branch with name " + branch +
+                          " in config file ignoring request and returning http code 202 ")
+            return Response(f'No Branch in config file ignoring request', status=202)
         logging.debug("Checked list spot " + str(y))
         y += 1
 
 
-
+# Main section that is used by flask to recive the webhook requests
 @app.route('/deploy', methods=['POST'])
 def webhook():
     """Webhook POST listener"""
@@ -190,7 +199,7 @@ def webhook():
             if verify(yamlconfig['GITHUB_SECRET'], request.data, getHeader("X-Hub-Signature-256")):
                 logging.info("request verifyed")
                 repo = request.json.get('repository')
-                return deploy(repo.get('name'), request.json.get('ref'))
+                return deploy(repo.get('name'), request.json.get('ref'), request.json)
             else:
                 abort(401)
         else:
@@ -199,6 +208,7 @@ def webhook():
         abort(405)
 
 
+# Starts the server and closes the server if no config is found
 if __name__ == '__main__':
     setup_logging()
     logging.info('Starting')
