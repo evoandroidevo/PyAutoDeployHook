@@ -1,6 +1,24 @@
 # PyAutoDeployHook
 Python webhook server for running github deploy on push
 
+## Config
+The basic of the config is a yaml formated file with the name of `config.yaml`.
+
+There are two main keys `REPOS` and `GITHUB_SECRET`.
+
+`REPOS` is a list of 3 keys `name`, `webhook`, and `branch`.
+
+```yaml
+GITHUB_SECRET: "secret here"
+REPOS:
+   - name: "repo name here"
+     webhook: "webhook url here"
+     branch: "branch of the repo you want to accept requests for"
+   - name: "second repo name here"
+     webhook: "webhook url here"
+     branch: "branch of the repo you want to accept requests for"
+```
+
 ## Install
 
 ```console
@@ -12,7 +30,6 @@ pip install -r requirements.txt
 deactivate
 ```
 Edit webhook.service to have the right path and user
-also edit myserver.py to have the correct webhook on sendurl=""
 
 after the edits are done you can test with 
 
@@ -51,4 +68,4 @@ check with `sudo systemctl status webhook` should look something like
 ```
 enable the service at boot with `sudo systemctl enable webhook`
 
-webhooks can now be sent to `0.0.0.0:5000/webhook/`
+webhooks can now be sent to `0.0.0.0:5000/deploy/`
