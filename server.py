@@ -141,22 +141,35 @@ def pullGit(path):
         return 'Git returned an error', 400
 
 
-def deploy(gitName, private, data):
+def deploy(gitName, branch):
     # TODO: Add check for branch
     """Deploy logic"""
     repos = yamlconfig['REPOS']
     logging.debug(repos)
     logging.debug(len(repos))
     logging.debug(type(repos))
+    logging.debug(branch)
+    branch = branch.replace("refs/heads/", "")
+    logging.debug(branch)
     y = 0
     for x in repos:
-        if x['name'] == gitName:
-            logging.debug("current repo is " + gitName)
-            logging.info("sending request to " + x['webhook'])
-            return sendWebhook("Webhook received and valid", x['webhook'])
-        elif y == len(repos):
-            return Response(f'Error: No Repo in config file', status=400)
+        if branch == x['branch']:
+            logging.debug("current branch is " + branch)
+            if x['name'] == gitName:
+                logging.debug("current repo is " + gitName)
+                logging.info("sending request to " + x['webhook'])
+                return sendWebhook("Webhook received and valid", x['webhook'])
+            elif y == len(repos) - 1:
+                logging.debug("Checked list spot " + str(y))
+                logging.debug("No Repo with name " + gitName + " in config file ignoring request and returning http code 202 ")
+                return Response(f'No Repo in config file ingnoring request', status=202)
+        elif y == len(repos) - 1:
+                logging.debug("Checked list spot " + str(y))
+                logging.debug("No Branch with name " + branch + " in config file ignoring request and returning http code 202 ")
+                return Response(f'No Branch in config file ignoring request', status=202)
+        logging.debug("Checked list spot " + str(y))
         y += 1
+
 
 
 @app.route('/deploy', methods=['POST'])
@@ -170,7 +183,7 @@ def webhook():
             if verify(yamlconfig['GITHUB_SECRET'], request.data, getHeader("X-Hub-Signature-256")):
                 logging.info("request verifyed")
                 repo = request.json.get('repository')
-                return deploy(repo.get('name'), repo.get('private'), request.json)
+                return deploy(repo.get('name'), request.json.get('ref'))
             else:
                 abort(401)
         else:
