@@ -26,7 +26,7 @@ class NoInternet(Exception):
 
 
 # read logging config for setup and fall back to basicConfig if file not found or has yaml errors
-def setup_logging(default_path='logconfig.yaml', default_level=logging.INFO, env_key='LOG_CFG'):
+def setup_logging(default_path='logconfig.yaml', default_level=logging.ERROR, env_key='LOG_CFG'):
     """
     | **@author:** Prathyush SP
     | Logging Setup
@@ -218,3 +218,9 @@ if __name__ == '__main__':
         logging.critical(e)
         sys.exit(1)
     logging.info('Exiting')
+
+# Uses gunicorn logging level
+if __name__ != '__main__':
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    app.logger.handlers = gunicorn_logger.handlers
+    app.logger.setLevel(gunicorn_logger.level)
