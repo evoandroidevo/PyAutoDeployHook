@@ -171,7 +171,7 @@ def deploy(gitName, branch, data):
             logging.debug("current branch is " + branch)
             if x['name'] == gitName:
                 logging.debug("current repo is " + gitName)
-                logging.info("sending request to " + x['webhook'])
+                logging.info("sending request to " + x['webhook'] + " for repo " + x['name'] + " of branch " + x['branch'])
                 return sendWebhook(data, x['webhook'])
             elif y == len(repos) - 1:
                 logging.debug("Checked list spot " + str(y))
@@ -197,14 +197,17 @@ def webhook():
     if request.method == 'POST':
         if "GitHub-Hookshot" in getHeader("User-Agent"):
             if verify(yamlconfig['GITHUB_SECRET'], request.data, getHeader("X-Hub-Signature-256")):
-                logging.info("request verifyed")
+                logging.info("request verified")
                 repo = request.json.get('repository')
                 return deploy(repo.get('name'), request.json.get('ref'), request.json)
             else:
+                logging.warn("Request failed verification")
                 abort(401)
         else:
+            logging.warn("Request not from GitHub with IP of " + getHeader('cf-connecting-ip'))
             abort(418)
     else:
+        logging.warn("Non POST request from " + getHeader('cf-connecting-ip'))
         abort(405)
 
 
@@ -221,6 +224,7 @@ if __name__ == '__main__':
 
 # Uses gunicorn logging level
 if __name__ != '__main__':
+    setup_logging()
     gunicorn_logger = logging.getLogger('gunicorn.error')
     app.logger.handlers = gunicorn_logger.handlers
     app.logger.setLevel(gunicorn_logger.level)
