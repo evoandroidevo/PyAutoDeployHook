@@ -1,6 +1,8 @@
 # PyAutoDeployHook
 Python webhook server for running github deploy on push
 
+I made this to be used as a central webhook entry point for my services running on Portainer stacks
+
 ## Config
 The basic of the config is a yaml formated file with the name of `config.yaml`.
 
@@ -18,12 +20,17 @@ REPOS:
      webhook: "webhook url here"
      branch: "branch of the repo you want to accept requests for"
 ```
+### Config Notes
+
+The repo name is case-sensitive and should match exactly how it is on GitHub
+
+Branch has to be specified cause GitHub sends a webhook request for any branch that gets a push on a repo
 
 ## Install
 
 ```console
-git clone https://github.com/evoandroidevo/PyInternetTestWebhook.git
-cd PyInternetTestWebhook
+git clone https://github.com/evoandroidevo/PyAutoDeployHook.git
+cd  PyAutoDeployHook
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -35,9 +42,9 @@ after the edits are done you can test with
 
 ```console
 source venv/bin/activate 
-gunicorn --workers 3 --bind 0.0.0.0:5000 wsgi:app
+gunicorn --workers 3 --bind 0.0.0.0:5000 server:app
 ```
-should get an output of 
+should get a similer output of 
 ```console
 Ubuntu gunicorn[205852]: [timestamp] [205852] [INFO] Starting gunicorn 20.1.0
 Ubuntu gunicorn[205852]: [timestamp] [205852] [INFO] Listening at: http://0.0.0.0:5000 (205852)
@@ -47,9 +54,10 @@ Ubuntu gunicorn[205854]: [timestamp] [205854] [INFO] Booting worker with pid: 20
 Ubuntu gunicorn[205855]: [timestamp] [205855] [INFO] Booting worker with pid: 205855
 ```
 now you can move the service file to `/etc/systemd/system/` and start it with
+
 ```console
-sudo mv webhook.service /etc/systemd/system/webhook.service
-sudo systemctl start webhook
+sudo mv webhook.service /etc/systemd/system/pyserver.service
+sudo systemctl start pyserver
 ```
 check with `sudo systemctl status webhook` should look something like
 ```console
@@ -68,4 +76,4 @@ check with `sudo systemctl status webhook` should look something like
 ```
 enable the service at boot with `sudo systemctl enable webhook`
 
-webhooks can now be sent to `0.0.0.0:5000/deploy/`
+webhooks can now be sent to `0.0.0.0:5000/deploy/` for you GitHub repos 
