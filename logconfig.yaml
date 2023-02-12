@@ -13,7 +13,7 @@ LOGS:
       stream: ext://sys.stdout
     logfile:
       class: logging.handlers.RotatingFileHandler
-      level: DEBUG
+      level: INFO
       formatter: simple
       filename: webhook.log
       maxBytes: 10485760 #10mb
