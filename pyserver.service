@@ -8,7 +8,7 @@ User=webhook
 Group=www-data
 WorkingDirectory=/path/to/project/webhook
 Environment="PATH=/path/to/project/webhook/venv/bin"
-ExecStart=/path/to/project/webhook/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:5000 wsgi:app
+ExecStart=/path/to/project/webhook/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:5000 --max-requests-jitter 2 --max-requests 10 server:app
 
 [Install]
 WantedBy=multi-user.target
